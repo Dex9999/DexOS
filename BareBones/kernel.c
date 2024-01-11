@@ -2,12 +2,11 @@
 #include <stddef.h>
 #include <stdint.h>
  
-/* Check if the compiler thinks you are targeting the wrong operating system. */
+/* check if the compiler thinks you are targeting the wrong operating system. */
 #if defined(__linux__)
 #error "You are not using a cross-compiler, you will most certainly run into trouble"
 #endif
  
-/* This tutorial will only work for the 32-bit ix86 targets. */
 #if !defined(__i386__)
 #error "This tutorial needs to be compiled with a ix86-elf compiler"
 #endif
@@ -111,12 +110,76 @@ void terminal_writestring(const char* data)
 {
 	terminal_write(data, strlen(data));
 }
- 
+unsigned char inb(unsigned short port) {
+    unsigned char result;
+    asm volatile ("inb %1, %0" : "=a"(result) : "Nd"(port));
+    return result;
+}
+
+// Function to write a byte to an I/O port
+void outb(unsigned short port, unsigned char data) {
+    asm volatile ("outb %0, %1" :: "a"(data), "Nd"(port));
+}
+void read_ps2_key(void) {
+    char key;
+	terminal_writestring("reading key\n");
+    // Wait for the PS/2 input buffer to be empty
+    while (inb(0x64) & 0x01)
+        ;
+	terminal_writestring("sending command\n");
+
+    // Send the "Read Data" command (0xED) to the PS/2 controller
+    outb(0x64, 0xED);
+	terminal_writestring("waiting for empty buffer\n");
+
+    // Wait for the PS/2 input buffer to be empty
+    while (inb(0x64) & 0x02)
+        ;
+	terminal_writestring("sending command\n");
+
+    // Send the "Echo" command (0xEE) to the PS/2 controller
+    outb(0x60, 0xEE);
+	terminal_writestring("waiting for empty buffer\n");
+
+    // Wait for the PS/2 input buffer to be empty
+    uint8_t status = inb(0x64);
+    terminal_putchar('S');  // Print 'S' to indicate status check
+	// IN EED TO LOG THIS PROPERLY :SOB:
+	terminal_putchar(status);
+
+
+    while (inb(0x64) & 0x01)
+        ;
+	terminal_writestring("sending command\n");
+
+    // Send the "Enable Scanning" command (0xF4) to the PS/2 controller
+    outb(0x60, 0xF4);
+	terminal_writestring("waiting for empty buffer\n");
+
+    // Wait for a key press
+    while (!(inb(0x64) & 0x01))
+        ;
+	terminal_writestring("reading key\n");
+
+    // Read the scancode from the PS/2 data port
+    key = inb(0x60);
+	terminal_writestring("key read\n");
+
+    // Now, 'key' contains the scancode read from the PS/2 keyboard
+    // You can handle it as needed
+	terminal_putchar(key);
+}
+
 void kernel_main(void) 
 {
-	/* Initialize terminal interface */
-	terminal_initialize();
- 
-	/* Newline support is left as an exercise. */
-	terminal_writestring("OH what ARE YOU??\nwhat ARE you? \nThe watchers with 1000 eyes!!\nWhy do you want to watch us die\nWill that entertain you?\nYou sick bastards.");
+    /* Initialize terminal interface */
+    terminal_initialize();
+
+    terminal_writestring("\n");
+
+	while(1){
+    read_ps2_key();
+	}
+    /* Newline support is left as an exercise. */
+    terminal_writestring("OH what ARE YOU??\nwhat ARE you? \nThe watchers with 1000 eyes!!\nWhy do you want to watch us die\nWill that entertain you?\nYou sick bastards.");
 }
