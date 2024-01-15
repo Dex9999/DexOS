@@ -11,14 +11,11 @@
 #error "This tutorial needs to be compiled with an ix86-elf compiler"
 #endif
 
-/* PS/2 Keyboard constants */
 #define KEYBOARD_DATA_PORT 0x60
 #define KEYBOARD_STATUS_PORT 0x64
 
-char key_buffer[256];  // Buffer to store pressed keys
-int key_buffer_index = 0;  // Index to keep track of the next available position in the buffer
 
-/* Hardware text mode color constants. */
+/* VGA text mode color constants. */
 enum vga_color {
     VGA_COLOR_BLACK = 0,
     VGA_COLOR_BLUE = 1,
@@ -90,11 +87,27 @@ void terminal_putentryat(char c, uint8_t color, size_t x, size_t y)
 
 void terminal_putchar(char c) 
 {
+    if(c == 0){
+      // null char
+      return;
+    }
     if (c == '\n') {
         terminal_column = 0;
         terminal_row++;
         return;
     }
+    if(c == '\t') {
+        terminal_column += 4;
+        return;
+    }
+    if(c == '\b'){
+        if(terminal_column > 0){
+          terminal_column--;
+          terminal_putentryat(' ', terminal_color, terminal_column, terminal_row); 
+          return;
+        } else{return;}
+    }
+    
     terminal_putentryat(c, terminal_color, terminal_column, terminal_row);
     if (++terminal_column == VGA_WIDTH) {
         terminal_column = 0;
@@ -113,7 +126,7 @@ void terminal_writestring(const char* data)
 {
     terminal_write(data, strlen(data));
 }
-// Function to convert an integer to a string
+
 void itoa(int n, char str[], int base) {
     int i = 0;
     int isNegative = 0;
@@ -156,25 +169,22 @@ void itoa(int n, char str[], int base) {
     }
 }
 
-// Function to write an integer to the terminal
 void terminal_writeint(int num, int base) {
-    char num_str[32]; // Adjust the size based on the maximum expected digits
+    char num_str[32]; 
     itoa(num, num_str, base);
     terminal_writestring(num_str);
 }
 
+//inb outb !!!!
 unsigned char inb(unsigned short port) {
     unsigned char result;
     asm volatile ("inb %1, %0" : "=a"(result) : "Nd"(port));
     return result;
 }
-
-// Function to write a byte to an I/O port
 void outb(unsigned short port, unsigned char data) {
     asm volatile ("outb %0, %1" :: "a"(data), "Nd"(port));
 }
 
-// Wait for the keyboard controller to be ready
 void wait_kbd(void) {
     while ((inb(KEYBOARD_STATUS_PORT) & 0x02) != 0)
         ;
@@ -182,7 +192,7 @@ void wait_kbd(void) {
 
 void init_kbd(void) {
     wait_kbd();
-    outb(KEYBOARD_STATUS_PORT, 0xAE); // Enable the keyboard
+    outb(KEYBOARD_STATUS_PORT, 0xAE);
 }
 
 char read_kbd(void) {
@@ -190,70 +200,123 @@ char read_kbd(void) {
     return inb(KEYBOARD_DATA_PORT);
 }
 bool newKey = true;
-// Keycode reference table
+
 char keycode_table[128] = {
     0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 0, 0,
     'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n', 0, 'a', 's',
     'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, '\\', 'z', 'x', 'c', 'v',
     'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0
 };
+char shift_keycode_table[128] = {
+    0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 0, 0,
+    'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n', 0, 'A', 'S',
+    'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '\"', '~', 0, '\|', 'Z', 'X', 'C', 'V',
+    'B', 'N', 'M', '<', '>', '?', 0, '*', 0, ' ', 0
+};
 #define KEY_BUFFER_SIZE 256
 
 char key_buffer[KEY_BUFFER_SIZE];
 size_t key_buffer_index = 0;
+bool shift = false;
 
-// Function to check if a key is already present in the buffer
-bool is_key_in_buffer(char key) {
-    for (size_t i = 0; i < key_buffer_index; ++i) {
-        if (key_buffer[i] == key) {
-            return true;
+void terminal_clear(void) 
+{
+    for (size_t y = 0; y < VGA_HEIGHT; y++) {
+        for (size_t x = 0; x < VGA_WIDTH; x++) {
+            const size_t index = y * VGA_WIDTH + x;
+            terminal_buffer[index] = vga_entry(' ', terminal_color);
         }
     }
-    return false;
+
+    // reset cursor position
+    terminal_row = 0;
+    terminal_column = 0;
 }
+
+
+char lastkeycode;
+//super hacky way to not use interrupts, read every second
 void read_ps2_key(void) 
 {
     char keycode = read_kbd();
-
-    // Check if the key is released (ignore key release events)
-    if (keycode < 0 || (keycode & 0x80) != 0)
-        return;
-
-    // Check if the key is already in the buffer
-    if (is_key_in_buffer(keycode))
-        return;
-
-    // Add the key to the buffer
-    key_buffer[key_buffer_index++] = keycode;
     
-    // Process the key or perform any other actions as needed
-    // For example, print the key to the screen:
-    terminal_putchar(keycode_table[keycode]);
+    if (keycode == lastkeycode)
+        return;
 
-    // Handle Enter key press
-    if (keycode == 0x1C) {
-        // Do something when Enter is pressed
-        terminal_writestring("ENTER");
+    key_buffer[key_buffer_index++] = keycode;
+
+   // don't print key releases
+   if (!(keycode < 0 || (keycode & 0x80) != 0)){
+     //deug mode for scancodes
+    //  terminal_writeint(keycode, 16);
+    //  lastkeycode=keycode;
+    //  return;
+     if(keycode == 1){
+       //escape key
+       terminal_clear();
+     } else if(keycode == 0x0e){
+       //backspace
+       terminal_putchar('\b');
+     } else if (keycode == 0x1C) {
+       //enter key
+       terminal_putchar('\n');
+     } else if(keycode == 0x2A) {
+       shift = !shift;
+     } else if(keycode == 0x48){
+       //up arrow
+       terminal_row--;
+     } else if(keycode == 0x50){
+       //down arrow
+       terminal_row++;
+     } else if(keycode == 0x4B){
+       //left arrow
+       terminal_column--;
+     } else if(keycode == 0x4D){
+       //right arrow
+       terminal_column++;
+     } else if(shift){
+      terminal_putchar(shift_keycode_table[keycode]);
+    } else {
+      terminal_putchar(keycode_table[keycode]);
     }
-
-    // Reset the buffer if it's full
+   }
+   lastkeycode=keycode;
+  
+    // reset the buffer if full
     if (key_buffer_index == KEY_BUFFER_SIZE)
         key_buffer_index = 0;
 }
 
 
+//from osdev wiki
+void disable_cursor()
+{
+  outb(0x3D4, 0x0A);
+  outb(0x3D5, 0x20);
+}
+void update_cursor(int x, int y)
+{
+  uint16_t pos = y * VGA_WIDTH + x;
+
+  outb(0x3D4, 0x0F);
+  outb(0x3D5, (uint8_t) (pos & 0xFF));
+  outb(0x3D4, 0x0E);
+  outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
+}
+
 void kernel_main(void) 
 {
-    /* Initialize terminal interface */
     terminal_initialize();
 
-    // Enable PS/2 keyboard
+    // send enable bytes for PS/2 keyboard
     init_kbd();
+    //disable_cursor();
 
-    terminal_writestring("\n");
+    terminal_writestring("Welcome to DexOS!!!!\n");
 
+  //4 ever!
    while (1) {
         read_ps2_key();
-        // Add your main kernel logic here
+        update_cursor(terminal_column, terminal_row);
     }
 }
