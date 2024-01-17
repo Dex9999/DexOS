@@ -43,6 +43,14 @@ size_t terminal_column;
 uint8_t terminal_color;
 uint16_t* terminal_buffer;
 
+// lil random function
+unsigned short lfsr = 0xACE1u;
+unsigned bit;
+unsigned rand(){
+    bit  = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5) ) & 1;
+    return lfsr =  (lfsr >> 1) | (bit << 15);
+}
+
 void terminal_initialize(void) 
 {
     terminal_row = 0;
@@ -75,11 +83,13 @@ void terminal_putchar(char c)
       return;
     }
     if (c == '\n') {
-        // if(mode == 3){
-        //   terminal_column = VGA_WIDTH/2-5;
-        // } else{
-          terminal_column = 0;
-        // }
+        terminal_column = 0;
+        terminal_row++;
+        return;
+    }
+    if (c == '\f') {
+        // special pong thing
+        terminal_column = terminal_column-1;
         terminal_row++;
         return;
     }
@@ -159,4 +169,18 @@ void terminal_writeint(int num, int base) {
     char num_str[32]; 
     itoa(num, num_str, base);
     terminal_writestring(num_str);
+}
+
+void terminal_clear(void) 
+{
+    for (size_t y = 0; y < VGA_HEIGHT; y++) {
+        for (size_t x = 0; x < VGA_WIDTH; x++) {
+            const size_t index = y * VGA_WIDTH + x;
+            terminal_buffer[index] = vga_entry(' ', terminal_color);
+        }
+    }
+
+    // reset cursor position
+    terminal_row = 0;
+    terminal_column = 0;
 }
