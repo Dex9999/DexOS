@@ -2,178 +2,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* check if the compiler thinks you are targeting the wrong operating system. */
-#if defined(__linux__)
-#error "You are not using a cross-compiler, you will most certainly run into trouble"
-#endif
-
-#if !defined(__i386__)
-#error "This tutorial needs to be compiled with an ix86-elf compiler"
-#endif
+#include "organized/vga.h"
 
 #define KEYBOARD_DATA_PORT 0x60
 #define KEYBOARD_STATUS_PORT 0x64
+int mode = 0;
+//about a second, let user toggle later
+int test_time = 15000000;
 
 
-/* VGA text mode color constants. */
-enum vga_color {
-    VGA_COLOR_BLACK = 0,
-    VGA_COLOR_BLUE = 1,
-    VGA_COLOR_GREEN = 2,
-    VGA_COLOR_CYAN = 3,
-    VGA_COLOR_RED = 4,
-    VGA_COLOR_MAGENTA = 5,
-    VGA_COLOR_BROWN = 6,
-    VGA_COLOR_LIGHT_GREY = 7,
-    VGA_COLOR_DARK_GREY = 8,
-    VGA_COLOR_LIGHT_BLUE = 9,
-    VGA_COLOR_LIGHT_GREEN = 10,
-    VGA_COLOR_LIGHT_CYAN = 11,
-    VGA_COLOR_LIGHT_RED = 12,
-    VGA_COLOR_LIGHT_MAGENTA = 13,
-    VGA_COLOR_LIGHT_BROWN = 14,
-    VGA_COLOR_WHITE = 15,
-};
-
-static inline uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg) 
-{
-    return fg | bg << 4;
-}
-
-static inline uint16_t vga_entry(unsigned char uc, uint8_t color) 
-{
-    return (uint16_t) uc | (uint16_t) color << 8;
-}
-
-size_t strlen(const char* str) 
-{
-    size_t len = 0;
-    while (str[len])
-        len++;
-    return len;
-}
-
-static const size_t VGA_WIDTH = 80;
-static const size_t VGA_HEIGHT = 25;
-size_t terminal_row;
-size_t terminal_column;
-uint8_t terminal_color;
-uint16_t* terminal_buffer;
-
-void terminal_initialize(void) 
-{
-    terminal_row = 0;
-    terminal_column = 0;
-    terminal_color = vga_entry_color(VGA_COLOR_GREEN, VGA_COLOR_DARK_GREY);
-    terminal_buffer = (uint16_t*) 0xB8000;
-    for (size_t y = 0; y < VGA_HEIGHT; y++) {
-        for (size_t x = 0; x < VGA_WIDTH; x++) {
-            const size_t index = y * VGA_WIDTH + x;
-            terminal_buffer[index] = vga_entry(' ', terminal_color);
-        }
-    }
-}
-
-void terminal_setcolor(uint8_t color) 
-{
-    terminal_color = color;
-}
-
-void terminal_putentryat(char c, uint8_t color, size_t x, size_t y) 
-{
-    const size_t index = y * VGA_WIDTH + x;
-    terminal_buffer[index] = vga_entry(c, color);
-}
-
-void terminal_putchar(char c) 
-{
-    if(c == 0){
-      // null char
-      return;
-    }
-    if (c == '\n') {
-        terminal_column = 0;
-        terminal_row++;
-        return;
-    }
-    if(c == '\t') {
-        terminal_column += 4;
-        return;
-    }
-    if(c == '\b'){
-        if(terminal_column > 0){
-          terminal_column--;
-          terminal_putentryat(' ', terminal_color, terminal_column, terminal_row); 
-          return;
-        } else{return;}
-    }
-    
-    terminal_putentryat(c, terminal_color, terminal_column, terminal_row);
-    if (++terminal_column == VGA_WIDTH) {
-        terminal_column = 0;
-        if (++terminal_row == VGA_HEIGHT)
-            terminal_row = 0;
-    }
-}
-
-void terminal_write(const char* data, size_t size) 
-{
-    for (size_t i = 0; i < size; i++)
-        terminal_putchar(data[i]);
-}
-
-void terminal_writestring(const char* data) 
-{
-    terminal_write(data, strlen(data));
-}
-
-void itoa(int n, char str[], int base) {
-    int i = 0;
-    int isNegative = 0;
-
-    // Handle 0 explicitly, otherwise empty string is printed
-    if (n == 0) {
-        str[i++] = '0';
-        str[i] = '\0';
-        return;
-    }
-
-    // Handle negative numbers for bases other than 10
-    if (n < 0 && base != 10) {
-        isNegative = 1;
-        n = -n;
-    }
-
-    // Process individual digits
-    while (n != 0) {
-        int rem = n % base;
-        str[i++] = (rem > 9) ? (rem - 10) + 'a' : rem + '0';
-        n = n / base;
-    }
-
-    // Add negative sign for negative numbers
-    if (isNegative)
-        str[i++] = '-';
-
-    str[i] = '\0';
-
-    // Reverse the string
-    int start = 0;
-    int end = i - 1;
-    while (start < end) {
-        char temp = str[start];
-        str[start] = str[end];
-        str[end] = temp;
-        start++;
-        end--;
-    }
-}
-
-void terminal_writeint(int num, int base) {
-    char num_str[32]; 
-    itoa(num, num_str, base);
-    terminal_writestring(num_str);
-}
 
 //inb outb !!!!
 unsigned char inb(unsigned short port) {
@@ -207,6 +44,12 @@ char keycode_table[128] = {
     'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, '\\', 'z', 'x', 'c', 'v',
     'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0
 };
+char caps_keycode_table[128] = {
+    0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 0, 0,
+    'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']', '\n', 0, 'A', 'S',
+    'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', '\'', '`', 0, '\\', 'Z', 'X', 'C', 'V',
+    'B', 'N', 'M', ',', '.', '/', 0, '*', 0, ' ', 0
+};
 char shift_keycode_table[128] = {
     0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 0, 0,
     'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n', 0, 'A', 'S',
@@ -218,6 +61,8 @@ char shift_keycode_table[128] = {
 char key_buffer[KEY_BUFFER_SIZE];
 size_t key_buffer_index = 0;
 bool shift = false;
+bool caps = false;
+bool ctrl = false;
 
 void terminal_clear(void) 
 {
@@ -232,62 +77,6 @@ void terminal_clear(void)
     terminal_row = 0;
     terminal_column = 0;
 }
-
-
-char lastkeycode;
-//super hacky way to not use interrupts, read every second
-void read_ps2_key(void) 
-{
-    char keycode = read_kbd();
-    
-    if (keycode == lastkeycode)
-        return;
-
-    key_buffer[key_buffer_index++] = keycode;
-
-   // don't print key releases
-   if (!(keycode < 0 || (keycode & 0x80) != 0)){
-     //deug mode for scancodes
-    //  terminal_writeint(keycode, 16);
-    //  lastkeycode=keycode;
-    //  return;
-     if(keycode == 1){
-       //escape key
-       terminal_clear();
-     } else if(keycode == 0x0e){
-       //backspace
-       terminal_putchar('\b');
-     } else if (keycode == 0x1C) {
-       //enter key
-       terminal_putchar('\n');
-     } else if(keycode == 0x2A) {
-       shift = !shift;
-     } else if(keycode == 0x48){
-       //up arrow
-       terminal_row--;
-     } else if(keycode == 0x50){
-       //down arrow
-       terminal_row++;
-     } else if(keycode == 0x4B){
-       //left arrow
-       terminal_column--;
-     } else if(keycode == 0x4D){
-       //right arrow
-       terminal_column++;
-     } else if(shift){
-      terminal_putchar(shift_keycode_table[keycode]);
-    } else {
-      terminal_putchar(keycode_table[keycode]);
-    }
-   }
-   lastkeycode=keycode;
-  
-    // reset the buffer if full
-    if (key_buffer_index == KEY_BUFFER_SIZE)
-        key_buffer_index = 0;
-}
-
-
 //from osdev wiki
 void disable_cursor()
 {
@@ -303,6 +92,342 @@ void update_cursor(int x, int y)
   outb(0x3D4, 0x0E);
   outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
 }
+// 100 % stolen code pls work bc i need blinking to stop on lychee's computers :(
+void disable_blinking() {
+    // Read I/O Address 0x03DA to reset index/data flip-flop
+    unsigned short dx = 0x03DA;
+    inb(dx);
+
+    // Write index 0x30 to 0x03C0 to set register index to 0x30
+    dx = 0x03C0;
+    outb(dx, 0x30);
+
+    // Read from 0x03C1 to get register contents
+    dx = 0x03C1;
+    unsigned char al = inb(dx);
+
+    // Unset Bit 3 to disable Blink
+    al &= 0xF7;
+
+    // Write to 0x03C0 to update register with changed value
+    dx = 0x03C0;
+    outb(dx, al);
+}
+
+// regular time function! :D nothing to see here
+int wait(float seconds) {
+    for (volatile int i = 0; i < seconds * test_time; i++){
+        // wait
+    }
+    return 0;
+}
+
+
+const char *dude_left = "      ###     \n"
+                        "[   ]#####    \n"
+                        "  |  |- -|_   \n"
+                        "  |/  \\_/  \\  \n"
+                        "  ||_______|  \n" 
+                        "   |___|___|  \n";
+
+const char *dude_right = "      ###     \n"
+                         "     #####[   ]\n"
+                         "     |- -|_ |  \n"
+                         "   /  \\_/  \\|  \n"
+                         "   |_______||  \n" 
+                         "   |___|___|  \n";
+
+
+const char *dude_chop_left =
+    "      ###         \n"
+    "     #####         \n"
+    "     |o o|_        \n"
+    "   /  \\_/  \\     \n"
+    "   |___   ----===\n"
+    "   |___|___|     ";
+const char *dude_chop_right =
+    "        ###    \n"
+    "       #####   \n"
+    "      _|o o|   \n"
+    "     /  \\_/  \\   \n"
+    "===----   ___|   \n"
+    "     |___|___|   ";
+
+const char *dude_dead =
+    "                  \n"
+    " -------          \n"
+    "/       \\        \n"
+    "| R.I.P.|         \n"
+    "|       |         \n"
+    "| _  _ _|         ";
+const char *trunk_1 = 
+    "|   {  /    |\n"
+    "| }   /     }\n"
+    "{       }   |\n"
+    "|        {  }\n"
+    "| }    { \\  |\n"
+    "{  |     /  }\n";
+const char *trunk_2 = 
+    "|           |\n"
+    "|    {   |  |\n"
+    "|        /  }\n"
+    "{ } }   }   |\n"
+    "| | }    }  |\n"
+    "{           }";
+const char *branch_l =
+    "     o  o    \n"
+    "   o0Oo  \\   \n"
+    "  O0Oo  --\\  \n"
+    "  oOOOo  /->-\n"
+    "    o0O-/    \n"
+    "             ";
+const char *branch_r =
+    "     oOo     \n"
+    "     / oO    \n"
+    "   /--00oO   \n"
+    "--<   OOo    \n"
+    "   \\oOO     ";
+
+char lastkeycode;
+unsigned short lfsr = 0xACE1u;
+unsigned bit;
+
+unsigned rand(){
+    bit  = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5) ) & 1;
+    return lfsr =  (lfsr >> 1) | (bit << 15);
+}
+
+//super hacky way to not use interrupts, read every second
+void read_ps2_key(void) 
+{
+    char keycode = read_kbd();
+
+
+    if (keycode == lastkeycode){
+        return;
+    }  
+    
+
+    key_buffer[key_buffer_index++] = keycode;
+
+    //shift - the keyrelease           key release, right shift
+    if ((keycode & 0x7F) == 0x2A && (keycode & 0x80) || (keycode & 0x7F) == 0x36 && (keycode & 0x80)) {
+        shift = false;
+    }
+
+    if ((keycode & 0x7F) == 0x1D && (keycode & 0x80) || (keycode & 0x7F) == 0x5B && (keycode & 0x80)) {
+        ctrl = false;
+    }
+
+
+   //debug mode for scancodes
+   // 0x80 is key release
+   if(mode == 2){
+     //INCLUDE MAC CMD KEY
+     if ((keycode & 0x7F) == 0x1D && (keycode & 0x80) || (keycode & 0x7F) == 0x5B && (keycode & 0x80)) {
+         ctrl = false;
+     }
+     if(keycode == 0x5B || keycode == 0x1D){
+       ctrl = true;
+     }
+     if(keycode & 0x80){
+        terminal_writestring("0x");
+        terminal_writeint((keycode & 0x7F), 16);
+        terminal_writestring("  released ");
+     } else{
+        terminal_writestring("0x");
+        terminal_writeint(keycode, 16);
+        terminal_writestring("  pressed  ");
+     }
+     lastkeycode=keycode;
+     terminal_column = 0;
+     if(keycode == 0x20){
+        if(ctrl){
+          mode = 0;
+          terminal_clear();
+          terminal_writestring("Regular Mode!\n");
+          ctrl = false;
+        } 
+      }
+     return;
+   }
+
+    //tree dude mode 
+   if(mode == 3){
+     disable_cursor();
+     terminal_row = VGA_HEIGHT/2;
+     terminal_column = VGA_WIDTH/2-5;
+
+     if(keycode == 0x4B){
+       terminal_clear();
+       terminal_writestring_at(dude_chop_left,VGA_WIDTH/2-5, VGA_HEIGHT/2);
+       wait(1);
+       terminal_clear();
+       terminal_writestring_at(dude_left,VGA_WIDTH/2-5, VGA_HEIGHT/2);
+     } else if(keycode == 0x4D){     
+       terminal_clear();
+       terminal_writestring_at(dude_chop_right,VGA_WIDTH/2-5, VGA_HEIGHT/2);
+       wait(1);
+       terminal_clear();
+       terminal_writestring_at(dude_right,VGA_WIDTH/2-5, VGA_HEIGHT/2);
+
+     } else if(keycode == 0x1D){     
+       terminal_clear();
+       terminal_writestring_at(dude_dead,VGA_WIDTH/2-5, VGA_HEIGHT/2);
+     }
+   }
+
+   // no key releases
+   if (!(keycode < 0 || (keycode & 0x80) != 0)){
+    switch(keycode){
+      case 1:
+        //escape key
+        terminal_clear();
+        break;
+      case 0x0e:
+        //backspace
+        terminal_putchar('\b');
+        break;
+      case 0x1C:
+        //enter
+        terminal_putchar('\n');
+        break;
+      case 0x2A:
+        shift = true;
+        break;
+      case 0x36:
+        //shift keydown only
+        shift = true;
+        break;
+      case 0x3A:
+        caps = !caps;
+        break;
+      case 0x5B:
+        //cmd key on mac
+        ctrl = true;
+        break;
+      case 0x1D:
+        ctrl = true;
+        break;
+      case 0x0F:
+        //tab
+        terminal_putchar('\t');
+        break;
+      case 0x48:
+        // make highlight / copy?
+        //up arrow
+        if (terminal_row > 0){
+            terminal_row--;
+        }
+        break;
+      case 0x50:
+        //down arrow
+        if (terminal_row < VGA_HEIGHT - 1){
+            terminal_row++;
+        }
+        break;
+      case 0x4B:
+        //left arrow
+        if (terminal_column > 0){
+            terminal_column--;
+        }
+        break;
+      case 0x4D:
+        //right arrow
+        if (terminal_column < VGA_WIDTH - 1){
+            terminal_column++;
+        }
+        break;
+      case 0x3B:
+        terminal_writeint(rand(),10);
+        terminal_putchar(' ');
+        break;
+      case 0x23:
+        if(ctrl){
+          terminal_clear();
+          terminal_writestring("Ctrl-D for Debug Mode\nCtrl-T to play TreeDude\nF1 for random numbers");
+          break;
+        } 
+      case 0x20:
+        if(ctrl){
+          mode = 2;
+          terminal_clear();
+          terminal_writestring("Debug Mode!\n");
+          ctrl = false;
+          break;
+        } 
+      case 0x14:
+        if(ctrl){
+          mode = 3;
+          terminal_clear();
+          terminal_writestring("TreeDude Mode!\n");
+          break;
+        } 
+      case 0x19:
+        if(ctrl){
+          mode = 1;
+          terminal_clear();
+          terminal_writestring("Pong!\n");
+          break;
+        } 
+      default:
+        if(shift){
+          terminal_putchar(shift_keycode_table[keycode]);
+        } else if(caps){
+          terminal_putchar(caps_keycode_table[keycode]);
+        } else {
+          terminal_putchar(keycode_table[keycode]);
+        }
+    }
+   }
+   lastkeycode=keycode;
+
+    // reset the buffer if full
+    if (key_buffer_index == KEY_BUFFER_SIZE)
+        key_buffer_index = 0;
+}
+
+int ball_x = VGA_WIDTH/2;
+int ball_y = VGA_HEIGHT/2;
+int velocity_x = 1;
+int velocity_y = 1;\
+int paddle_x = VGA_WIDTH/2;
+int paddle_y = VGA_HEIGHT-1;
+int paddle_2_x = VGA_WIDTH/2;
+int paddle_2_y = 0;
+char ball = 'O';
+bool paddle_1_left = false;
+bool paddle_1_right = false;
+bool paddle_2_left = false;
+bool paddle_2_right = false;
+int score[] = {0,0};
+void input_wait(float seconds, bool *paddle_1_left, bool *paddle_1_right, bool *paddle_2_left, bool *paddle_2_right) {
+    for (volatile int i = 0; i < seconds * (test_time/2); i++) {
+        char keycode = read_kbd();
+        if (keycode == lastkeycode) {
+            continue;
+        }
+        if (keycode == 0x4b) {
+            *paddle_1_left = true;
+        } else if (keycode == 0x4d) {
+            *paddle_1_right = true;
+        }
+        if (keycode & 0x80) {
+            if ((keycode & 0x7F) == 0x4B) {
+                *paddle_1_left = false;
+            } else if ((keycode & 0x7F) == 0x4D) {
+                *paddle_1_right = false;
+            }
+        }
+
+        if (*paddle_1_left) {
+            paddle_x--;
+        } else if (*paddle_1_right) {
+            paddle_x++;
+        }
+        lastkeycode = keycode;
+    }
+}
 
 void kernel_main(void) 
 {
@@ -312,11 +437,67 @@ void kernel_main(void)
     init_kbd();
     //disable_cursor();
 
-    terminal_writestring("Welcome to DexOS!!!!\n");
+    // make some computers play nice vvv
+    disable_blinking();
+
+    terminal_writestring("Welcome to DexOS!!!! (ctrl-h for help)\n");
+
 
   //4 ever!
    while (1) {
-        read_ps2_key();
-        update_cursor(terminal_column, terminal_row);
+        if(mode == 0 || mode == 2 || mode == 3){
+          read_ps2_key();
+          update_cursor(terminal_column, terminal_row);
+        } else if(mode == 1){
+          //test timer?
+          
+          
+          terminal_clear();
+          
+          terminal_writestring_at("------", VGA_WIDTH/2-5, 0); 
+          terminal_writestring_at("------", paddle_x, paddle_y);
+
+          terminal_column = 0;
+          terminal_row = 0;
+          terminal_writeint(ball_x,10);
+          terminal_writestring(" : ");
+          terminal_writeint(paddle_x,10);
+          
+          //balls
+          terminal_putentryat(ball, terminal_color, ball_x, ball_y);
+          ball_x += velocity_x;
+          ball_y += velocity_y;
+          if(ball_x >= VGA_WIDTH-1 || ball_x <= 0){
+            velocity_x = -velocity_x;
+          }
+
+          //collison code needs to work <3
+          if(ball_y >= VGA_HEIGHT || ball_y <= 0){
+            velocity_y = -velocity_y;
+            if(ball_y < 0){
+              if(ball_x >= paddle_2_x && ball_x <= paddle_2_x+6){
+                velocity_y = -velocity_y;
+              } else {
+                score[1]++;
+                ball_x = VGA_WIDTH/2;
+                ball_y = VGA_HEIGHT/2;
+              }
+            } else if (ball_y >= VGA_HEIGHT-1){
+              if(ball_x >= paddle_x && ball_x <= paddle_x+6){
+                velocity_y = -velocity_y;
+              } else {
+                score[0]++;
+                ball_x = VGA_WIDTH/2;
+                ball_y = VGA_HEIGHT/2;
+              }
+            }
+            
+          }
+          
+          //input and define a clear(-ish) framerate thingy
+          input_wait(0.01, &paddle_1_left, &paddle_1_right, &paddle_2_left, &paddle_2_right);
+        } else{
+          terminal_writestring("WTF DID YOU DO");
+        }
     }
 }
