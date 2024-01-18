@@ -43,14 +43,6 @@ size_t terminal_column;
 uint8_t terminal_color;
 uint16_t* terminal_buffer;
 
-// lil random function
-unsigned short lfsr = 0xACE1u;
-unsigned bit;
-unsigned rand(){
-    bit  = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5) ) & 1;
-    return lfsr =  (lfsr >> 1) | (bit << 15);
-}
-
 void terminal_initialize(void) 
 {
     terminal_row = 0;
@@ -183,4 +175,9 @@ void terminal_clear(void)
     // reset cursor position
     terminal_row = 0;
     terminal_column = 0;
+}
+void enable_cursor()
+{
+  outb(0x3D4, 0x0A);
+  outb(0x3D5, (inb(0x3D5) & 0xC0) | 0x0F);
 }
