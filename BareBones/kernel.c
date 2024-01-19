@@ -338,7 +338,7 @@ void read_ps2_key(void)
       case 0x23:
         if(ctrl){
           terminal_clear();
-          terminal_writestring("Ctrl-D for Debug Mode\nCtrl-P to play Pong\nF1 for random numbers");
+          terminal_writestring("Ctrl-D for Debug Mode\nCtrl-P to play Pong\nCtrl-S for Settings\nF1 for random numbers");
           break;
         } 
       case 0x20:
@@ -442,8 +442,32 @@ void settings_input_wait(float seconds) {
                 mode = 0;
                 terminal_clear();
                 terminal_writestring("Regular Mode!\n");
+            } else{
+              terminal_clear();
+              wait(0.05);
+              VGA_HEIGHT -= 2;
             }
         }
+        // allow user to modify screen size
+        if (keycode == 0x11) {
+          terminal_clear();
+          wait(0.05);
+          VGA_HEIGHT += 2;
+        }
+        //if (keycode == 0x1f) {
+            // in above ctrl thing
+        //}
+        if (keycode == 0x1e) {
+            terminal_clear();
+            wait(0.05);
+            VGA_WIDTH -= 2;
+        }
+        if (keycode == 0x20) {
+            terminal_clear();
+            wait(0.05);
+            VGA_WIDTH += 2;
+        }
+
         if (keycode == 0x1C) {
                 mode = 5;
                 terminal_clear();
@@ -452,14 +476,15 @@ void settings_input_wait(float seconds) {
         lastkeycode = keycode;
     //}
 }
-int ball_x = VGA_WIDTH/2;
-int ball_y = VGA_HEIGHT/2;
+//uses reg vga width and height but'll switch after literally a frame
+int ball_x = 80/2;
+int ball_y = 25/2;
 int velocity_x = 1;
 int velocity_y = 1;\
 int paddle_x = 0;
-int paddle_y = VGA_HEIGHT/2;
-int paddle_2_x = VGA_WIDTH-1;
-int paddle_2_y = VGA_HEIGHT/2;
+int paddle_y = 25/2;
+int paddle_2_x = 80-1;
+int paddle_2_y = 25/2;
 char ball = 'O';
 bool paddle_1_up = false;
 bool paddle_1_down = false;
@@ -666,9 +691,11 @@ void pong(){
 
           terminal_column = VGA_WIDTH/2-7;
           terminal_row = 0;
+          terminal_color = vga_entry_color(VGA_COLOR_RED, VGA_COLOR_DARK_GREY);
           pong_score(score[0], terminal_column);
           terminal_writestring("  :  ");
           pong_score(score[1], terminal_column);
+          terminal_color = vga_entry_color(VGA_COLOR_GREEN, VGA_COLOR_DARK_GREY);
 
           //balls
           terminal_putentryat(ball, terminal_color, ball_x, ball_y);
@@ -700,11 +727,16 @@ void kernel_main(void)
           pong();
         }  else if(mode == 4){
           //settings :o omg change test_time moment
-          
-          terminal_writestring_at("Interval: ", VGA_WIDTH/2-1, VGA_HEIGHT/2);
+
+          // visual borders
+          terminal_writestring_at("+-\f\b|",0,0);
+          terminal_writestring_at("|\f\b-+",VGA_WIDTH-1,VGA_HEIGHT-2);
+
+          terminal_writestring_at("Interval: ", VGA_WIDTH/2-7, VGA_HEIGHT/2);
           terminal_writeint(test_time, 10);
-          terminal_column -= 6;
-          terminal_writestring("\n(aim to make the blinky thing below blink every second)\n");
+          terminal_column -= 10;
+          terminal_writestring("\f(Lower interval means faster ball)");
+          terminal_writestring_at("WASD to edit screen size", VGA_WIDTH/2-15, VGA_HEIGHT/2+5);
           settings_input_wait(1);
         } else if (mode==5){
           

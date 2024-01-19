@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # os.bin path
-MYOS_BINARY_PATH="myos.bin"
+MYOS_BINARY_PATH="DexOS.bin"
 
 # 40_custom path
 GRUB_CFG_PATH="/etc/grub.d/40_custom"
@@ -18,7 +18,7 @@ sudo sed -i '/^menuentry '\''MyOS'\'' {/,/^}/d' "$GRUB_CFG_PATH"
 sudo cp "$MYOS_BINARY_PATH" "$BOOT_DESTINATION"
 
 # Add menuentryentry to grub.cfg
-echo "menuentry 'MyOS' {" | sudo tee -a "$GRUB_CFG_PATH"
+echo "menuentry 'DexOS' {" | sudo tee -a "$GRUB_CFG_PATH"
 echo "    set root='$ROOT_PARTITION'" | sudo tee -a "$GRUB_CFG_PATH"
 echo "    multiboot /boot/$(basename $MYOS_BINARY_PATH)" | sudo tee -a "$GRUB_CFG_PATH"
 echo "}" | sudo tee -a "$GRUB_CFG_PATH"
