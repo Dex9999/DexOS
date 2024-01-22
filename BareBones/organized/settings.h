@@ -108,12 +108,12 @@ void settings(){
   terminal_writeint(test_time, 10);
   terminal_writestring("         \n  (Lower interval means faster ball)");
   terminal_writestring("\n\n  WASD to edit screen size\n  Press Enter to test speed with a DVD screensaver, press Esc to leave it");
-  
+
   // visual borders
   terminal_writestring_at("+-\f\b|",0,0);
   terminal_writestring_at("|\f\b-+",VGA_WIDTH-1-pong_width_offset_bc_reg_width_breaks_everything,VGA_HEIGHT-2);
-  
-  settings_input_wait(1);
+
+  settings_input_wait();
 }
 
 char* dvdArt1 =
@@ -172,9 +172,9 @@ void screensaver() {
     terminal_writestring(dvdArt4);
 
 
-  
+
     char keycode = read_kbd();
-    if ((keycode == 0x01)) {
+    if (keycode == 0x01) {
         terminal_color = vga_entry_color(VGA_COLOR_GREEN, VGA_COLOR_DARK_GREY);
         terminal_clear();
         mode = 4;
