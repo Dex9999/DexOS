@@ -1,4 +1,3 @@
-// just sprites for game i gave up on
 const char *dude_left = "      ###     \n"
                         "[   ]#####    \n"
                         "  |  |- -|_   \n"

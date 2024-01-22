@@ -1,6 +1,3 @@
-#define KEYBOARD_DATA_PORT 0x60
-#define KEYBOARD_STATUS_PORT 0x64
-static const size_t VGA_WIDTH = 80;
 //inb outb !!!!
 unsigned char inb(unsigned short port) {
     unsigned char result;
@@ -26,7 +23,7 @@ char read_kbd(void) {
     return inb(KEYBOARD_DATA_PORT);
 }
 
-//cursor stuff from osdev wiki
+//from osdev wiki
 void disable_cursor()
 {
   outb(0x3D4, 0x0A);
@@ -37,17 +34,15 @@ void enable_cursor()
   outb(0x3D4, 0x0A);
   outb(0x3D5, (inb(0x3D5) & 0xC0) | 0x0F);
 }
-
 void update_cursor(int x, int y)
 {
-    uint16_t pos = y * VGA_WIDTH + x;
+  uint16_t pos = y * VGA_WIDTH + x;
 
-    outb(0x3D4, 0x0F);
-    outb(0x3D5, (uint8_t) (pos & 0xFF));
-    outb(0x3D4, 0x0E);
-    outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
+  outb(0x3D4, 0x0F);
+  outb(0x3D5, (uint8_t) (pos & 0xFF));
+  outb(0x3D4, 0x0E);
+  outb(0x3D5, (uint8_t) ((pos >> 8) & 0xFF));
 }
-
 // 100 % stolen code pls work bc i need blinking to stop on lychee's computers :(
 void disable_blinking() {
     // Read I/O Address 0x03DA to reset index/data flip-flop

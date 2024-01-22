@@ -177,8 +177,3 @@ void terminal_clear(void)
     terminal_row = 0;
     terminal_column = 0;
 }
-void enable_cursor()
-{
-  outb(0x3D4, 0x0A);
-  outb(0x3D5, (inb(0x3D5) & 0xC0) | 0x0F);
-}
