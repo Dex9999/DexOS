@@ -12,7 +12,7 @@ BOOT_DESTINATION="/boot/"
 # Root partition 
 ROOT_PARTITION="hd0,msdos5"
 
-sudo sed -i '/^menuentry '\''MyOS'\'' {/,/^}/d' "$GRUB_CFG_PATH"
+sudo sed -i '/^menuentry '\''DexOS'\'' {/,/^}/d' "$GRUB_CFG_PATH"
 
 # Copy os.bin to the boot directory
 sudo cp "$MYOS_BINARY_PATH" "$BOOT_DESTINATION"
